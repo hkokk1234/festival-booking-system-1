@@ -1,0 +1,51 @@
+:root { --bg:#0f172a; --card:#111827; --muted:#94a3b8; --text:#e5e7eb; --accent:#38bdf8; --border:#1f2937; }
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{ margin:0; font:16px/1.5 system-ui,Segoe UI,Roboto; background:var(--bg); color:var(--text); }
+
+.topbar{
+  display:flex; gap:1rem; align-items:center; padding:.75rem 1rem;
+  background:#0b1220; border-bottom:1px solid var(--border); position:sticky; top:0;
+}
+.logo{ width:28px; height:28px; }
+.tabs{ margin-left:auto; display:flex; gap:.5rem; }
+.tabs button{
+  background:#0b3750; border:1px solid var(--border); color:var(--text);
+  padding:.45rem .7rem; border-radius:10px; cursor:pointer;
+}
+.tabs .primary{ outline:2px solid #124b67; }
+.userbox{ display:flex; gap:.5rem; align-items:center; }
+.muted{ color:var(--muted); font-size:.9rem; }
+.small{ font-size:.85rem; padding:.35rem .6rem; }
+
+.container{ max-width:960px; margin:1.5rem auto; padding:0 1rem; }
+.card{ background:var(--card); border:1px solid var(--border); border-radius:16px; padding:1rem; box-shadow:0 2px 8px rgba(0,0,0,.2); }
+.view.hidden{ display:none; }
+
+.row{ display:flex; gap:1rem; }
+.center{ align-items:center; }
+.between{ justify-content:space-between; }
+
+.controls{ display:flex; gap:.5rem; }
+input[type="search"], input[type="text"], input[type="password"], input[type="email"]{
+  padding:.55rem .7rem; border-radius:10px; border:1px solid var(--border); background:#0b1220; color:var(--text);
+}
+button{ padding:.6rem .9rem; border-radius:12px; border:1px solid var(--border); background:#0b3750; color:var(--text); cursor:pointer; }
+button:hover{ filter:brightness(1.08); }
+
+.form{ display:grid; gap:.75rem; max-width:420px; }
+label span{ display:block; margin-bottom:.25rem; color:var(--muted); font-size:.9rem; }
+
+.grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:1rem; margin-top:1rem; }
+
+.card-item{ background:#0e1628; border:1px solid var(--border); border-radius:14px; padding:.8rem; }
+.card-item h3{ margin:.15rem 0 .25rem; font-size:1.05rem; }
+.meta{ color:var(--muted); font-size:.9rem; margin:.15rem 0; }
+.badge{ display:inline-block; background:#0b3750; border:1px solid #124b67; color:var(--accent); padding:.12rem .5rem; border-radius:999px; font-size:.75rem; }
+
+.msg{ margin-top:.75rem; font-size:.9rem; }
+.msg.error{ color:#fca5a5; }
+.msg.success{ color:#86efac; }
+
+.link{ color:var(--accent); text-decoration:none; }
+.link:hover{ text-decoration:underline; }

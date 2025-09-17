@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="el">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Festivals · Festival Management</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' rx='8' fill='%23111827'/%3E%3Ctext x='8' y='48' font-size='40'%3E🎪%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/css/styles.css" />
+    <style>
+      :root{--bg:#0f172a;--panel:#111827;--muted:#94a3b8;--border:#1f2937;--brand:#38bdf8;--btn:#0b3750;}
+      body{margin:0;background:var(--bg);color:#e5e7eb;font:16px/1.5 system-ui,Segoe UI,Roboto}
+      .container{max-width:1100px;margin:2rem auto;padding:0 1rem}
+      .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+      .toolbar{display:flex;justify-content:space-between;align-items:end;margin-bottom:1rem}
+      .title{margin:0;font-size:1.6rem}
+      a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
+      button{padding:.55rem .9rem;border-radius:12px;border:1px solid var(--border);background:var(--btn);color:#e5e7eb;cursor:pointer}
+      button:hover{filter:brightness(1.05)}
+      button[disabled]{opacity:.6;cursor:not-allowed}
+      input,select,textarea{padding:.55rem .7rem;border-radius:10px;border:1px solid var(--border);background:#0b1220;color:#e5e7eb}
+      textarea{min-height:80px}
+      .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:1rem}
+      .grid{display:grid;gap:1rem}
+      .grid-2{grid-template-columns:1fr 1fr}
+      .hidden{display:none}
+      table{width:100%;border-collapse:collapse}
+      th,td{border-bottom:1px solid var(--border);padding:.6rem .5rem;text-align:left;vertical-align:top}
+      th{color:var(--muted);font-weight:600}
+      .msg{margin-top:.5rem}
+      .msg.error{color:#fca5a5}.msg.success{color:#86efac}
+      .muted{color:var(--muted)}
+      .badge{display:inline-block;background:#0b3750;border:1px solid #124b67;color:var(--brand);padding:.12rem .5rem;border-radius:999px;font-size:.8rem}
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <div class="toolbar">
+        <h1 class="title">Festivals</h1>
+        <div class="row">
+          <a href="/">← Αρχική</a>
+          <a href="/organizer.html" style="margin-left:.5rem">Organizer</a>
+          <button id="btn-logout" title="Logout" style="margin-left:.5rem">Logout</button>
+        </div>
+      </div>
+
+      <!-- ΛΙΣΤΑ -->
+      <section class="card">
+        <div class="row" style="justify-content:space-between;margin-bottom:.6rem">
+          <div class="row">
+            <input id="q" type="search" placeholder="Αναζήτηση ονόματος/χώρου..." />
+            <select id="state">
+              <option value="">State: any</option>
+              <option value="SCHEDULING">SCHEDULING</option>
+              <option value="CREATED">CREATED</option>
+            </select>
+            <button id="btn-reload">Ανανέωση</button>
+          </div>
+          <span class="muted small">Πεδία DB: NAME · VENUE · START_DATE · END_DATE · STATE · DESCRIPTION</span>
+        </div>
+
+        <div id="list-msg" class="msg"></div>
+        <div style="max-height:480px;overflow:auto">
+          <table id="tbl-fests">
+            <thead>
+              <tr>
+                <th>ID</th><th>Όνομα</th><th>Χώρος</th><th>Ημερομηνίες</th><th>Κατάσταση</th><th>Δημιουργήθηκε</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ΦΟΡΜΑ ΔΗΜΙΟΥΡΓΙΑΣ -->
+      <section class="card">
+        <h2 style="margin:.2rem 0 .6rem">Δημιουργία νέου φεστιβάλ</h2>
+
+        <div class="grid grid-2">
+          <label>Όνομα* <input id="f-name" required /></label>
+          <label>Χώρος / Venue* <input id="f-venue" required /></label>
+          <label>Από* <input id="f-start" type="date" required /></label>
+          <label>Έως* <input id="f-end" type="date" required /></label>
+          <label>Κατάσταση
+            <select id="f-state">
+              <option value="SCHEDULING" selected>SCHEDULING</option>
+              <option value="CREATED">CREATED</option>
+            </select>
+          </label>
+          <label>Περιγραφή <textarea id="f-desc" placeholder="Λίγα λόγια για το φεστιβάλ…"></textarea></label>
+        </div>
+
+        <div class="row" style="margin-top:.6rem">
+          <button id="btn-create">Create festival</button>
+          <span id="create-msg" class="msg"></span>
+        </div>
+      </section>
+    </main>
+
+    <script src="/js/config.js"></script>
+    <script>
+      // ---- CONFIG / URL helpers ----
+      const CFG = window.APP_CONFIG || {};
+      const RAW_BASE = (CFG.API_BASE || "/api").replace(/\/+$/, "");
+      const API_BASE = RAW_BASE.startsWith("http") ? RAW_BASE : (location.origin + RAW_BASE);
+      const FESTS_PATH = "/festivals"; // -> /api/festivals
+
+      const abs = (path) => {
+        if (/^https?:\/\//i.test(path)) return path;
+        if (path.startsWith("/")) return API_BASE + path;
+        return API_BASE + "/" + path.replace(/^\/+/, "");
+      };
+
+      // ---- DOM helpers ----
+      const $ = (s) => document.querySelector(s);
+      const listMsg = (t, kind) => { const el=$("#list-msg"); el.textContent=t||""; el.className="msg"+(kind?" "+kind:""); };
+      const createMsg = (t, kind) => { const el=$("#create-msg"); el.textContent=t||""; el.className="msg"+(kind?" "+kind:""); };
+      const authHeader = () => {
+        const t = localStorage.getItem("access_token");
+        return t ? { Authorization: "Bearer " + t } : {};
+      };
+
+      function fmtDate(d){
+        try { return new Intl.DateTimeFormat("el-GR", { dateStyle:"medium" }).format(new Date(d)); }
+        catch { return "—"; }
+      }
+      function validRange(a,b){
+        if (!a || !b) return false;
+        const A=new Date(a+"T00:00:00"), B=new Date(b+"T00:00:00");
+        return !isNaN(A) && !isNaN(B) && A.getTime() <= B.getTime();
+      }
+
+      // ---- List ----
+      async function loadFestivals(){
+        const q = $("#q").value.trim().toLowerCase();
+        const state = $("#state").value;
+
+        listMsg("Φόρτωση...");
+        try{
+          const url = new URL(abs(FESTS_PATH + "?size=500&sort=startDate,desc"));
+          const res = await fetch(url, {
+            headers: { "Accept":"application/json", ...authHeader() },
+            credentials: "include"
+          });
+          const ct = res.headers.get("content-type") || "";
+          const data = ct.includes("application/json") ? await res.json() : null;
+
+          if (!res.ok){ listMsg(`Σφάλμα (HTTP ${res.status})`,"error"); return; }
+
+          let arr = Array.isArray(data) ? data : (Array.isArray(data?.content) ? data.content : []);
+          if (state) arr = arr.filter(f => String(f.state||"").toUpperCase() === state);
+          if (q) arr = arr.filter(f =>
+            String(f.name||"").toLowerCase().includes(q) ||
+            String(f.venue||"").toLowerCase().includes(q)
+          );
+
+          renderFestivals(arr);
+          listMsg(arr.length ? "" : "Δεν βρέθηκαν φεστιβάλ.", arr.length ? "" : "error");
+        }catch{
+          listMsg("Σφάλμα δικτύου.","error");
+        }
+      }
+
+      function renderFestivals(list){
+        const tb = $("#tbl-fests tbody");
+        tb.innerHTML = "";
+        list.forEach(f => {
+          const tr = document.createElement("tr");
+          const start = f.startDate ? fmtDate(f.startDate) : "—";
+          const end   = f.endDate   ? fmtDate(f.endDate)   : "—";
+          const created = f.createdAt ? fmtDate(f.createdAt) : "—";
+          tr.innerHTML = `
+            <td>${f.id ?? "—"}</td>
+            <td>${f.name ?? "—"}</td>
+            <td>${f.venue ?? "—"}</td>
+            <td>${start} – ${end}</td>
+            <td><span class="badge">${String(f.state||"").toUpperCase()||"—"}</span></td>
+            <td>${created}</td>
+          `;
+          tb.appendChild(tr);
+        });
+      }
+
+      // ---- Create ----
+      async function createFestival(){
+        const name  = $("#f-name").value.trim();
+        const venue = $("#f-venue").value.trim();
+        const start = $("#f-start").value;
+        const end   = $("#f-end").value;
+        const state = $("#f-state").value;
+        const desc  = $("#f-desc").value.trim();
+
+        if (!name || !venue || !start || !end){
+          createMsg("Συμπλήρωσε τα πεδία με *.","error"); return;
+        }
+        if (!validRange(start, end)){
+          createMsg("Άκυρο εύρος ημερομηνιών (Από ≤ Έως).","error"); return;
+        }
+
+        createMsg("Αποστολή...");
+        try{
+          const res = await fetch(abs(FESTS_PATH), {
+            method: "POST",
+            headers: { "Content-Type":"application/json", "Accept":"application/json", ...authHeader() },
+            credentials: "include",
+            body: JSON.stringify({
+              name,
+              venue,
+              startDate: start,
+              endDate: end,
+              state,
+              description: desc || null
+            })
+          });
+          const ct = res.headers.get("content-type")||"";
+          const data = ct.includes("application/json") ? await res.json().catch(()=>null) : await res.text().catch(()=>null);
+
+          if (!res.ok){
+            const msg = (typeof data==='object' ? (data.message||data.error) : data) || `HTTP ${res.status}`;
+            createMsg("Αποτυχία δημιουργίας: " + msg, "error");
+            return;
+          }
+
+          createMsg("Το φεστιβάλ δημιουργήθηκε.","success");
+          $("#f-name").value = $("#f-venue").value = $("#f-desc").value = "";
+          $("#f-start").value = $("#f-end").value = "";
+          $("#f-state").value = "SCHEDULING";
+          loadFestivals();
+        }catch{
+          createMsg("Σφάλμα δικτύου.","error");
+        }
+      }
+
+      // ---- Wire UI ----
+      document.addEventListener("DOMContentLoaded", () => {
+        $("#btn-reload").addEventListener("click", loadFestivals);
+        $("#btn-create").addEventListener("click", createFestival);
+        $("#q").addEventListener("keydown", e => { if (e.key === "Enter") loadFestivals(); });
+        $("#btn-logout").addEventListener("click", () => {
+          try{ localStorage.removeItem("access_token"); localStorage.removeItem("roles"); }catch{}
+          location.href = "/login.html";
+        });
+        loadFestivals();
+      });
+    </script>
+  </body>
+</html>

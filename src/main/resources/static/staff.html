@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="el">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Staff · Festival Management</title>
+    <!-- Inline favicon για να μην γράφει 404/500 -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' rx='8' fill='%23111827'/%3E%3Ctext x='8' y='48' font-size='40'%3E🎵%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/css/styles.css" />
+    <style>
+      body{margin:0;background:#0f172a;color:#e5e7eb;font:16px/1.5 system-ui,Segoe UI,Roboto}
+      .container{max-width:1100px;margin:2rem auto;padding:0 1rem}
+      .header{display:flex;gap:1rem;align-items:end;justify-content:space-between;margin-bottom:1rem}
+      .title{font-size:1.6rem;margin:0}
+      .controls{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+      select,input[type="search"],input[type="datetime-local"],input[type="number"],input[type="text"]{padding:.55rem .7rem;border-radius:10px;border:1px solid #1f2937;background:#0b1220;color:#e5e7eb}
+      button{padding:.6rem .9rem;border-radius:12px;border:1px solid #1f2937;background:#0b3750;color:#e5e7eb;cursor:pointer}
+      button[disabled]{opacity:.6;cursor:not-allowed}
+      .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem}
+      .card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:1rem}
+      .card h3{margin:.15rem 0 .35rem;font-size:1.1rem}
+      .meta{color:#94a3b8;font-size:.92rem;margin:.15rem 0}
+      .badge{display:inline-block;background:#0b3750;border:1px solid #124b67;color:#38bdf8;padding:.12rem .5rem;border-radius:999px;font-size:.75rem}
+      .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+      .msg{margin-top:.75rem}
+      .msg.error{color:#fca5a5}
+      .msg.success{color:#86efac}
+      a{color:#38bdf8;text-decoration:none}
+      a:hover{text-decoration:underline}
+      .hint{color:#94a3b8;font-size:.9rem}
+      .rv{margin-top:.4rem;padding:.4rem .6rem;border:1px dashed #1f2937;border-radius:10px}
+      .rv .label{color:#94a3b8;font-size:.85rem}
+      .small{font-size:.9rem}
+      .ghost{background:#0b1220}
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <div class="header">
+        <h1 class="title">Διαχείριση Παραστάσεων (Staff)</h1>
+        <div class="controls">
+          <input id="q" type="search" placeholder="Αναζήτηση τίτλου/είδους/καλλιτέχνη..." />
+          <select id="status" title="Φίλτρο status">
+            <option value="ALL" selected>ALL</option>
+            <option value="PENDING">PENDING</option>
+            <option value="SUBMITTED">SUBMITTED</option>
+            <option value="APPROVED">APPROVED</option>
+            <option value="ACCEPTED">ACCEPTED</option>
+            <option value="FINAL_SUBMITTED">FINAL_SUBMITTED</option>
+            <option value="CONFIRMED">CONFIRMED</option>
+            <option value="CREATED">CREATED</option>
+            <option value="REJECTED">REJECTED</option>
+          </select>
+          <button id="btn-search">Φόρτωση</button>
+          <a href="/" class="ghost" style="margin-left:.25rem;padding:.6rem .9rem;border-radius:12px;border:1px solid #1f2937">← Αρχική</a>
+          <!-- ΝΕΟ: Logout -->
+          <button id="btn-logout" class="ghost" title="Logout">Έξοδος</button>
+        </div>
+      </div>
+
+      <div id="msg" class="msg"></div>
+      <div id="list" class="grid"></div>
+    </main>
+
+    <script src="/js/config.js"></script>
+    <script>
+      // ========= CONFIG =========
+      const CFG = window.APP_CONFIG || {};
+      const API_BASE = (CFG.API_BASE || "/api").replace(/\/+$/,"");
+      const PERF_PATH = "/performances";
+
+      // ========= helpers =========
+      const $ = s => document.querySelector(s);
+      const setMsg = (t, kind) => { const m=$("#msg"); m.textContent=t||""; m.className="msg"+(kind?" "+kind:""); };
+      const escapeHtml = s => String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+      const authHeader = () => { const t=localStorage.getItem("access_token"); return t?{Authorization:"Bearer "+t, Accept:"application/json"}:{ Accept:"application/json" }; };
+
+      // ===== Logout =====
+      async function doLogout(){
+        try {
+          // Αν υπάρχει endpoint logout στο backend, δοκίμασε προαιρετικά
+          const t = localStorage.getItem("access_token");
+          if (t) {
+            await fetch(new URL(`${API_BASE}/auth/logout`, location.origin), {
+              method: "POST",
+              headers: { "Authorization": "Bearer " + t, "Accept":"application/json" },
+              credentials: "include"
+            }).catch(()=>{});
+          }
+        } finally {
+          // Πάντα καθάρισε localStorage και γύρνα login
+          try {
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("roles");
+            localStorage.removeItem("username");
+          } catch {}
+          location.href = "/login.html";
+        }
+      }
+
+      function decodeJwtPayload(token){
+        try{
+          const p = token.split(".")[1];
+          const b64 = p.replace(/-/g, "+").replace(/_/g, "/");
+          const json = decodeURIComponent(atob(b64).split("").map(c => "%" + ("00"+c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+          return JSON.parse(json);
+        }catch{ return null; }
+      }
+
+      function ensureStaff(){
+        const t = localStorage.getItem("access_token");
+        if (!t) { location.href="/login.html"; return false; }
+
+        // Προαιρετικό: αν έχει λήξει το JWT, κάνε logout
+        try {
+          const pl = decodeJwtPayload(t) || {};
+          if (pl.exp && Date.now() >= pl.exp * 1000) { doLogout(); return false; }
+        } catch {}
+
+        let roles = [];
+        const saved = localStorage.getItem("roles");
+        if (saved) { try { roles = JSON.parse(saved) || []; } catch {} }
+        if (!roles.length) {
+          const pl = decodeJwtPayload(t) || {};
+          if (Array.isArray(pl.roles)) roles = pl.roles;
+          else if (Array.isArray(pl.authorities)) roles = pl.authorities;
+          else if (typeof pl.scope === "string") roles = pl.scope.split(/\s+/);
+          else if (typeof pl.role === "string") roles = [pl.role];
+        }
+        roles = roles.map(r => String(r).toUpperCase().replace(/^ROLE_/,""));
+        if (!(roles.includes("STAFF") || roles.includes("ADMIN"))) {
+          doLogout();
+          return false;
+        }
+        return true;
+      }
+
+      function extractTime(perf){
+        const cands = [
+          perf.scheduledTime, perf.performanceTime, perf.performanceDateTime,
+          perf.startTime, perf.dateTime, perf.time, perf.timeSlot
+        ].filter(Boolean);
+        if ((!cands || !cands.length) && Array.isArray(perf.preferredPerformanceSlots) && perf.preferredPerformanceSlots.length){
+          const sorted = [...perf.preferredPerformanceSlots].sort(); cands.push(sorted[0]);
+        }
+        const s = cands.find(v => typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) || cands.find(v => typeof v === "string") || null;
+        if (!s) return null;
+        const first = String(s).split(/\s*-\s*/)[0];
+        const d = new Date(first);
+        return isNaN(d.getTime()) ? null : d;
+      }
+
+      async function confirmPerformance(perfId, isoDateTime, alsoAssignSelf){
+        const bodies = [
+          { status:"CONFIRMED", scheduledTime: isoDateTime, assignToCurrentUser: !!alsoAssignSelf },
+          { status:"CONFIRMED", performanceTime: isoDateTime, assignToCurrentUser: !!alsoAssignSelf },
+          { status:"CONFIRMED", performanceDateTime: isoDateTime, assignToCurrentUser: !!alsoAssignSelf },
+          { status:"CONFIRMED", preferredPerformanceSlots: [isoDateTime], assignToCurrentUser: !!alsoAssignSelf }
+        ];
+        const endpoints = [
+          { method:"PATCH", url: `${API_BASE}${PERF_PATH}/${perfId}` },
+          { method:"PUT",   url: `${API_BASE}${PERF_PATH}/${perfId}` },
+          { method:"POST",  url: `${API_BASE}${PERF_PATH}/${perfId}/confirm` },
+          { method:"POST",  url: `${API_BASE}${PERF_PATH}/${perfId}/approve` }
+        ];
+
+        for (const ep of endpoints){
+          for (const body of bodies){
+            try{
+              const res = await fetch(new URL(ep.url, location.origin), {
+                method: ep.method,
+                headers: { "Content-Type":"application/json", ...authHeader() },
+                body: JSON.stringify(body),
+                credentials: "include"
+              });
+              if (res.ok) return await (res.headers.get("content-type")||"").includes("application/json") ? res.json() : res.text();
+            }catch{}
+          }
+        }
+        throw new Error("Αδυναμία ενημέρωσης (API schema/route δεν ταιριάζει).");
+      }
+
+      async function postReview(perfId, score, comments){
+        const res = await fetch(new URL(`${API_BASE}${PERF_PATH}/${encodeURIComponent(perfId)}/review`, location.origin), {
+          method: "POST",
+          headers: { "Content-Type":"application/json", "Accept":"application/json", ...authHeader() },
+          body: JSON.stringify({ score, comments }),
+          credentials: "include"
+        });
+
+        const raw = await res.text();
+        if (!res.ok) {
+          try { const j = JSON.parse(raw); throw new Error(j.error || j.message || raw); }
+          catch { throw new Error(raw || `HTTP ${res.status}`); }
+        }
+        try { return JSON.parse(raw); } catch { return raw; }
+      }
+
+      function card(perf){
+        const id = perf.id ?? perf.performanceId ?? "";
+        const title = perf.name || "Untitled";
+        const artist = perf.mainArtist?.username || perf.mainArtist?.name || perf.artist || "—";
+        const fest = perf.festival?.name || perf.festivalName || (perf.festivalId ? ("Festival #" + perf.festivalId) : "—");
+        const when = extractTime(perf);
+        const whenTxt = when ? new Intl.DateTimeFormat("el-GR", { dateStyle: "medium", timeStyle: "short" }).format(when) : "—";
+        const status = String(perf.status||"").toUpperCase();
+
+        const existingReview = perf.review ? {
+          score: perf.review.score,
+          comments: perf.review.comments,
+          reviewer: perf.review.reviewer?.username || perf.review.reviewer?.name || "—"
+        } : null;
+
+        const root = document.createElement("div");
+        root.className = "card";
+        root.innerHTML = `
+          <h3>${escapeHtml(title)}</h3>
+          <div class="meta">Καλλιτέχνης: ${escapeHtml(artist)}</div>
+          <div class="meta">Φεστιβάλ: ${escapeHtml(fest)}</div>
+          <div class="meta">Τρέχουσα κατάσταση: <strong>${escapeHtml(status)}</strong></div>
+          <div class="meta">Προγραμματισμένη ώρα: <strong>${escapeHtml(whenTxt)}</strong></div>
+
+          ${existingReview ? `
+            <div class="rv">
+              <div class="label">Υπάρχον review:</div>
+              <div>Score: <strong>${escapeHtml(existingReview.score)}</strong></div>
+              <div>Σχόλια: ${escapeHtml(existingReview.comments || "—")}</div>
+              <div class="small muted">Reviewer: ${escapeHtml(existingReview.reviewer)}</div>
+            </div>
+          ` : ``}
+
+          <div class="row" style="margin-top:.5rem">
+            <input type="datetime-local" class="dt" />
+            <label class="row"><input type="checkbox" class="assign" /> <span class="hint">Assign σε μένα</span></label>
+            <button class="btn-confirm">Confirm</button>
+          </div>
+
+          <div class="row" style="margin-top:.5rem">
+            <input type="number" min="1" max="10" step="1" class="rv-score" placeholder="Score 1–10" style="width:120px" />
+            <input type="text" class="rv-comments" placeholder="Σχόλια (προαιρετικά)" style="flex:1; min-width:200px" />
+            <button class="btn-review">Review</button>
+          </div>
+
+          <div class="msg small"></div>
+        `;
+
+        const btn = root.querySelector(".btn-confirm");
+        const dt = root.querySelector(".dt");
+        const msg = root.querySelector(".msg");
+        const assign = root.querySelector(".assign");
+
+        btn.addEventListener("click", async () => {
+          const val = dt.value;
+          if (!val) { msg.textContent="Δώσε ημερομηνία/ώρα."; msg.className="msg error"; return; }
+          const iso = val.length===16 ? val + ":00" : val;
+          btn.disabled = true; msg.textContent="Αποστολή..."; msg.className="msg";
+          try{
+            await confirmPerformance(id, iso, assign.checked);
+            msg.textContent="OK! Επιβεβαιώθηκε."; msg.className="msg success";
+            setTimeout(() => { render(); }, 500);
+          }catch(e){
+            msg.textContent = "Αποτυχία επιβεβαίωσης. " + (e.message||"");
+            msg.className="msg error";
+          }finally{
+            btn.disabled = false;
+          }
+        });
+
+        const btnReview = root.querySelector(".btn-review");
+        const inScore = root.querySelector(".rv-score");
+        const inComments = root.querySelector(".rv-comments");
+
+        btnReview.addEventListener("click", async () => {
+          const s = parseInt(inScore.value, 10);
+          if (isNaN(s) || s < 1 || s > 10) {
+            msg.textContent = "Δώσε score 1–10.";
+            msg.className = "msg error";
+            return;
+          }
+          btnReview.disabled = true;
+          msg.textContent = "Αποστολή review..."; msg.className = "msg";
+          try{
+            await postReview(id, s, inComments.value || "");
+            msg.textContent = "Το review καταχωρίστηκε."; msg.className = "msg success";
+            setTimeout(() => { render(); }, 500);
+          }catch(e){
+            msg.textContent = "Αποτυχία review: " + (e.message||"");
+            msg.className = "msg error";
+          }finally{
+            btnReview.disabled = false;
+          }
+        });
+
+        return root;
+      }
+
+      async function fetchList(){
+        const term = $("#q").value.trim();
+        const wanted = $("#status").value;
+
+        setMsg("Φόρτωση...", "");
+        const listEl = $("#list");
+        listEl.innerHTML = "";
+
+        const params = new URLSearchParams();
+        params.set("status", wanted && wanted !== "ALL" ? wanted : "ALL");
+        if (term) params.set("q", term);
+        params.set("size", "200");
+        params.set("sort", "createdAt,desc");
+
+        let data, arr = [];
+        try{
+          const url = new URL(`${API_BASE}${PERF_PATH}?${params.toString()}`, location.origin);
+          const res = await fetch(url, { headers:{...authHeader()}, credentials:"include" });
+          if (res.status === 401 || res.status === 403) { doLogout(); return; }
+          const ct = res.headers.get("content-type") || "";
+          data = ct.includes("application/json") ? await res.json() : null;
+        }catch(e){
+          setMsg("Σφάλμα δικτύου.", "error");
+          return;
+        }
+
+        if (!data){
+          setMsg("Κενή απόκριση.", "error");
+          return;
+        }
+
+        if (Array.isArray(data)) arr = data;
+        else if (Array.isArray(data.content)) arr = data.content;
+
+        if (!arr.length){
+          setMsg("Δεν βρέθηκαν παραστάσεις.", "error");
+          return;
+        }
+
+        arr.sort((a,b) => {
+          const ta = extractTime(a), tb = extractTime(b);
+          if (ta && tb) return ta - tb;
+          if (ta && !tb) return -1;
+          if (!ta && tb) return 1;
+          return String(a.name||"").localeCompare(String(b.name||""));
+        });
+
+        const frag = document.createDocumentFragment();
+        arr.forEach(p => frag.appendChild(card(p)));
+        listEl.appendChild(frag);
+        setMsg("", "");
+      }
+
+      async function render(){
+        if (!ensureStaff()) return;
+        await fetchList();
+      }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        $("#btn-search").addEventListener("click", render);
+        $("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") render(); });
+        $("#btn-logout").addEventListener("click", doLogout);   // <-- ΝΕΟ
+        render();
+      });
+    </script>
+  </body>
+</html>

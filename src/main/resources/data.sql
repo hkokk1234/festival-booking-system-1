@@ -1,0 +1,128 @@
+-- Κλείνουμε προσωρινά τα FK για καθάρισμα
+SET REFERENTIAL_INTEGRITY FALSE;
+
+TRUNCATE TABLE ROLE_ASSIGNMENTS;
+TRUNCATE TABLE PERFORMANCE_BAND_MEMBERS;
+TRUNCATE TABLE PERFORMANCE_MERCHANDISE;
+TRUNCATE TABLE PERFORMANCE_REHEARSAL_SLOTS;
+TRUNCATE TABLE PERFORMANCE_SETLIST;
+TRUNCATE TABLE PERFORMANCE_TECHNICAL_REQUIREMENTS;
+TRUNCATE TABLE PERFORMANCE_TIME_SLOTS;
+TRUNCATE TABLE PERFORMANCES;
+TRUNCATE TABLE FESTIVALS;
+TRUNCATE TABLE USERS;
+
+SET REFERENTIAL_INTEGRITY TRUE;
+
+-- ===== FESTIVALS =====
+INSERT INTO FESTIVALS (NAME, START_DATE, END_DATE, VENUE, STATE, DESCRIPTION, CREATED_AT) VALUES
+('Athens Jazz Festival',       DATE '2025-06-03', DATE '2025-06-05', 'Technopolis',   'SCHEDULING', 'Annual jazz festival in Athens.',       CURRENT_DATE),
+('Thessaloniki Film Festival', DATE '2025-11-02', DATE '2025-11-11', 'Olympion',      'CREATED',    'International film festival.',          CURRENT_DATE),
+('Rockwave',                   DATE '2025-07-12', DATE '2025-07-12', 'Malakasa',      'CREATED',    'One-day rock event.',                   CURRENT_DATE),
+('Release Athens',             DATE '2025-06-15', DATE '2025-06-20', 'Plateia Nerou', 'CREATED',    'Series of open-air shows.',             CURRENT_DATE),
+('Summer Nostos',              DATE '2025-06-23', DATE '2025-06-30', 'SNFCC',         'CREATED',    'Free summer cultural week at SNFCC.',   CURRENT_DATE);
+
+-- ===== USERS =====
+-- Όλοι οι κωδικοί = bcrypt("123")
+-- hash για 123: $2a$10$7mRNdP72HxM1feZ4gNZZRe9FLbQlRejrgU6VVzyTY4YP3BBhoBvxO
+INSERT INTO USERS (USERNAME, EMAIL, PASSWORD) VALUES
+('admin',   'admin@example.com',   '$2a$10$7mRNdP72HxM1feZ4gNZZRe9FLbQlRejrgU6VVzyTY4YP3BBhoBvxO'),
+('artist1', 'artist1@example.com', '$2a$10$7mRNdP72HxM1feZ4gNZZRe9FLbQlRejrgU6VVzyTY4YP3BBhoBvxO'),
+('staff1',  'staff1@example.com',  '$2a$10$7mRNdP72HxM1feZ4gNZZRe9FLbQlRejrgU6VVzyTY4YP3BBhoBvxO'),
+('user1',   'user1@example.com',   '$2a$10$7mRNdP72HxM1feZ4gNZZRe9FLbQlRejrgU6VVzyTY4YP3BBhoBvxO');
+
+-- ===== ROLE ASSIGNMENTS =====
+-- admin -> ADMIN + ORGANIZER στο Athens Jazz Festival
+INSERT INTO ROLE_ASSIGNMENTS (USER_ID, FESTIVAL_ID, ROLE)
+SELECT u.ID, f.ID, 'ADMIN'
+FROM USERS u JOIN FESTIVALS f ON f.NAME = 'Athens Jazz Festival'
+WHERE u.USERNAME = 'admin';
+
+INSERT INTO ROLE_ASSIGNMENTS (USER_ID, FESTIVAL_ID, ROLE)
+SELECT u.ID, f.ID, 'ORGANIZER'
+FROM USERS u JOIN FESTIVALS f ON f.NAME = 'Athens Jazz Festival'
+WHERE u.USERNAME = 'admin';
+
+-- staff1 -> STAFF στο Athens Jazz Festival
+INSERT INTO ROLE_ASSIGNMENTS (USER_ID, FESTIVAL_ID, ROLE)
+SELECT u.ID, f.ID, 'STAFF'
+FROM USERS u JOIN FESTIVALS f ON f.NAME = 'Athens Jazz Festival'
+WHERE u.USERNAME = 'staff1';
+
+-- artist1 -> ARTIST στο Athens Jazz Festival
+INSERT INTO ROLE_ASSIGNMENTS (USER_ID, FESTIVAL_ID, ROLE)
+SELECT u.ID, f.ID, 'ARTIST'
+FROM USERS u JOIN FESTIVALS f ON f.NAME = 'Athens Jazz Festival'
+WHERE u.USERNAME = 'artist1';
+
+-- artist1 -> ORGANIZER στο Release Athens
+INSERT INTO ROLE_ASSIGNMENTS (USER_ID, FESTIVAL_ID, ROLE)
+SELECT u.ID, f.ID, 'ORGANIZER'
+FROM USERS u JOIN FESTIVALS f ON f.NAME = 'Release Athens'
+WHERE u.USERNAME = 'artist1';
+
+-- ===== PERFORMANCE (APPROVED) για Athens Jazz Festival =====
+INSERT INTO PERFORMANCES
+  (NAME, DESCRIPTION, GENRE, CREATED_AT, STATUS, DURATION, MAIN_ARTIST_ID, FESTIVAL_ID, ASSIGNED_STAFF_ID)
+SELECT
+  'Midnight Jazz Set', 'Late night quartet session.', 'Jazz',
+  CURRENT_TIMESTAMP, 'APPROVED', 3600,
+  a.ID, f.ID, s.ID
+FROM FESTIVALS f
+JOIN USERS a ON a.USERNAME = 'artist1'
+JOIN USERS s ON s.USERNAME = 'staff1'
+WHERE f.NAME = 'Athens Jazz Festival';
+
+-- main artist και ως μέλος συγκροτήματος
+INSERT INTO PERFORMANCE_BAND_MEMBERS (PERFORMANCE_ID, USER_ID)
+SELECT p.ID, a.ID
+FROM PERFORMANCES p
+JOIN FESTIVALS f ON f.NAME = 'Athens Jazz Festival'
+JOIN USERS a ON a.USERNAME = 'artist1'
+WHERE p.NAME = 'Midnight Jazz Set' AND p.FESTIVAL_ID = f.ID;
+
+-- Τεχνικές απαιτήσεις
+INSERT INTO PERFORMANCE_TECHNICAL_REQUIREMENTS (PERFORMANCE_ID, REQUIREMENT)
+SELECT p.ID, '2x Vocal Microphones'
+FROM PERFORMANCES p JOIN FESTIVALS f ON f.NAME='Athens Jazz Festival'
+WHERE p.NAME='Midnight Jazz Set' AND p.FESTIVAL_ID=f.ID;
+
+INSERT INTO PERFORMANCE_TECHNICAL_REQUIREMENTS (PERFORMANCE_ID, REQUIREMENT)
+SELECT p.ID, 'DI Box for Bass'
+FROM PERFORMANCES p JOIN FESTIVALS f ON f.NAME='Athens Jazz Festival'
+WHERE p.NAME='Midnight Jazz Set' AND p.FESTIVAL_ID=f.ID;
+
+-- Merchandise
+INSERT INTO PERFORMANCE_MERCHANDISE (PERFORMANCE_ID, ITEM)
+SELECT p.ID, 'T-Shirts (M/L)'
+FROM PERFORMANCES p JOIN FESTIVALS f ON f.NAME='Athens Jazz Festival'
+WHERE p.NAME='Midnight Jazz Set' AND p.FESTIVAL_ID=f.ID;
+
+-- Setlist
+INSERT INTO PERFORMANCE_SETLIST (PERFORMANCE_ID, SONG)
+SELECT p.ID, 'Blue in Green'
+FROM PERFORMANCES p JOIN FESTIVALS f ON f.NAME='Athens Jazz Festival'
+WHERE p.NAME='Midnight Jazz Set' AND p.FESTIVAL_ID=f.ID;
+
+INSERT INTO PERFORMANCE_SETLIST (PERFORMANCE_ID, SONG)
+SELECT p.ID, 'So What'
+FROM PERFORMANCES p JOIN FESTIVALS f ON f.NAME='Athens Jazz Festival'
+WHERE p.NAME='Midnight Jazz Set' AND p.FESTIVAL_ID=f.ID;
+
+-- Προτιμώμενες ώρες πρόβας
+INSERT INTO PERFORMANCE_REHEARSAL_SLOTS (PERFORMANCE_ID, REHEARSAL_TIME)
+SELECT p.ID, TIMESTAMP '2025-06-03 17:00:00'
+FROM PERFORMANCES p JOIN FESTIVALS f ON f.NAME='Athens Jazz Festival'
+WHERE p.NAME='Midnight Jazz Set' AND p.FESTIVAL_ID=f.ID;
+
+-- Προτιμώμενα time slots εμφάνισης
+INSERT INTO PERFORMANCE_TIME_SLOTS (PERFORMANCE_ID, PERFORMANCE_TIME)
+SELECT p.ID, TIMESTAMP '2025-06-03 23:30:00'
+FROM PERFORMANCES p JOIN FESTIVALS f ON f.NAME='Athens Jazz Festival'
+WHERE p.NAME='Midnight Jazz Set' AND p.FESTIVAL_ID=f.ID;
+
+-- ===== VIEW =====
+CREATE OR REPLACE VIEW V_USER_ROLES AS
+SELECT u.id AS user_id, u.username, u.email, u.password, ra.role, ra.festival_id
+FROM users u
+JOIN role_assignments ra ON ra.user_id = u.id;

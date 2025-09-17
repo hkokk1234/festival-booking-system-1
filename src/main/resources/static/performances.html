@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="el">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Performances · Festival Management</title>
+    <link rel="icon" href="/assets/favicon.ico" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <style>
+      body{margin:0;background:#0f172a;color:#e5e7eb;font:16px/1.5 system-ui,Segoe UI,Roboto}
+      .container{max-width:960px;margin:2rem auto;padding:0 1rem}
+      .header{display:flex;gap:1rem;align-items:end;justify-content:space-between;margin-bottom:1rem}
+      .title{font-size:1.6rem;margin:0}
+      .controls{display:flex;gap:.5rem;align-items:center}
+      input[type="search"]{padding:.55rem .7rem;border-radius:10px;border:1px solid #1f2937;background:#0b1220;color:#e5e7eb}
+      button{padding:.6rem .9rem;border-radius:12px;border:1px solid #1f2937;background:#0b3750;color:#e5e7eb;cursor:pointer}
+      .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1rem}
+      .card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:1rem}
+      .card h3{margin:.15rem 0 .35rem;font-size:1.1rem}
+      .meta{color:#94a3b8;font-size:.92rem;margin:.15rem 0}
+      .badge{display:inline-block;background:#0b3750;border:1px solid #124b67;color:#38bdf8;padding:.12rem .5rem;border-radius:999px;font-size:.75rem}
+      .msg{margin-top:.75rem}
+      .msg.error{color:#fca5a5}
+      .empty{color:#94a3b8;text-align:center;padding:1rem}
+      a{color:#38bdf8;text-decoration:none}
+      a:hover{text-decoration:underline}
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <div class="header">
+        <h1 class="title">Εγκεκριμένες Παραστάσεις</h1>
+        <div class="controls">
+          <input id="q" type="search" placeholder="Αναζήτηση τίτλου/είδους..." />
+          <button id="btn-search">Αναζήτηση</button>
+          <a href="/" style="margin-left:.5rem">← Αρχική</a>
+        </div>
+      </div>
+
+      <div id="list" class="grid"></div>
+      <div id="msg" class="msg"></div>
+    </main>
+
+    <!-- Προαιρετικό runtime config (ορίζει window.APP_CONFIG) -->
+    <script src="/js/config.js"></script>
+    <!-- Η λογική πλέον είναι *μόνο* στο module -->
+    <script type="module" src="/js/performances.js"></script>
+  </body>
+</html>

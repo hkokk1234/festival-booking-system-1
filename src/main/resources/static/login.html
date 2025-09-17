@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="el">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Login · Festival Management</title>
+    <link rel="icon" href="/assets/favicon.ico" />
+    <link rel="stylesheet" href="/css/styles.css" />
+    <style>
+      body{margin:0;background:#0f172a;color:#e5e7eb;font:16px/1.5 system-ui,Segoe UI,Roboto}
+      .container{max-width:600px;margin:2rem auto;padding:0 1rem}
+      .card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:1rem}
+      .form{display:grid;gap:.85rem}
+      label span{display:block;color:#94a3b8;font-size:.9rem;margin-bottom:.25rem}
+      input{padding:.6rem .75rem;border-radius:10px;border:1px solid #1f2937;background:#0b1220;color:#e5e7eb;width:100%}
+      .row{display:flex;gap:.5rem;align-items:center}
+      .actions{display:flex;gap:.6rem;align-items:center;margin-top:.5rem}
+      button{padding:.6rem .95rem;border-radius:10px;border:1px solid #1f2937;background:#0b3750;color:#e5e7eb;cursor:pointer}
+      button[disabled]{opacity:.6;cursor:not-allowed}
+      .hint{color:#94a3b8;font-size:.9rem}
+      .msg{margin-top:.75rem}
+      .msg.error{color:#fca5a5}
+      .msg.success{color:#86efac}
+      .msg.warn{color:#fde68a}
+      a{color:#38bdf8;text-decoration:none}
+      a:hover{text-decoration:underline}
+      .fallback{margin-top:.75rem;display:none}
+      .muted{color:#94a3b8;font-size:.9rem}
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Σύνδεση</h1>
+
+      <section class="card">
+        <form id="form-login" class="form" novalidate>
+          <label>
+            <span>Username *</span>
+            <input id="username" name="username" autocomplete="username" required />
+          </label>
+          <label>
+            <span>Password *</span>
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <label class="row">
+            <input id="showPw" type="checkbox" />
+            <span class="hint">Εμφάνιση κωδικού</span>
+          </label>
+
+          <div class="actions">
+            <button id="btn-submit" type="submit">Sign in</button>
+            <a href="/" class="hint">← Αρχική</a>
+          </div>
+
+          <div id="msg" class="msg"></div>
+
+          <!-- Fallback UI όταν δεν βρίσκουμε ρόλο/DB -->
+          <div id="fallback" class="fallback">
+            <div class="muted">Δεν κατέστη δυνατή η ανάκτηση ρόλων από τη βάση. Μπορείς να συνεχίσεις με εικασία ρόλου:</div>
+            <div class="actions" style="margin-top:.5rem">
+              <button type="button" id="btn-fallback-admin">Συνέχεια ως ADMIN/ORGANIZER</button>
+              <button type="button" id="btn-fallback-staff">Συνέχεια ως STAFF</button>
+              <button type="button" id="btn-fallback-artist">Συνέχεια ως ARTIST</button>
+              <button type="button" id="btn-fallback-user">Συνέχεια ως USER</button>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <p class="hint" style="margin-top:1rem">
+        Δεν έχεις λογαριασμό; <a href="/register.html">Εγγραφή</a>.
+      </p>
+    </main>
+
+    <script src="/js/config.js"></script>
+    <script>
+      // ======= CONFIG =======
+      const CFG = window.APP_CONFIG || {};
+      const API_BASE = (CFG.API_BASE || "/api").replace(/\/+$/, "");
+      const LOGIN_PATH = (CFG.AUTH && CFG.AUTH.LOGIN) || "/auth/login";
+
+      // πιθανά endpoints για ανάκτηση role assignments
+      const ROLE_ENDPOINTS = [
+        "/api/role-assignments",     // ?userId=...
+        "/api/users/roles",          // ?userId=...
+        "/api/users/{id}/roles",     // path param
+        "/api/auth/roles"            // current user
+      ];
+
+      // redirect mapping
+      const ROLE_REDIRECTS = {
+        ADMIN: "/organizer.html",
+        ORGANIZER: "/organizer.html",
+        STAFF: "/staff.html",
+        ARTIST: "/artist.html",
+        USER: "/"
+      };
+      const DEFAULT_REDIRECT = "/";
+
+      // ======= helpers =======
+      const $ = s => document.querySelector(s);
+      const setMsg = (t, kind) => { const m=$("#msg"); m.textContent=t||""; m.className="msg"+(kind?" "+kind:""); };
+      const showFallback = (flag=true) => { $("#fallback").style.display = flag ? "block" : "none"; };
+
+      const saveToken = t => { try{ t?localStorage.setItem("access_token", t):localStorage.removeItem("access_token"); }catch{} };
+      const saveRoles = roles => { try{ roles?localStorage.setItem("roles", JSON.stringify(roles)):localStorage.removeItem("roles"); }catch{} };
+      const authHeader = () => { const t = localStorage.getItem("access_token"); return t ? { Authorization: "Bearer " + t } : {}; };
+
+      function decodeJwtPayload(token){
+        try{
+          const p = token.split(".")[1];
+          const b64 = p.replace(/-/g, "+").replace(/_/g, "/");
+          const json = decodeURIComponent(atob(b64).split("").map(c => "%" + ("00"+c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+          return JSON.parse(json);
+        }catch{ return null; }
+      }
+      function pickNumericIdFromJwtSub(token){
+        const pl = decodeJwtPayload(token) || {};
+        const sub = pl.sub ?? pl.userId ?? pl.uid ?? pl.id;
+        return (sub != null && /^\d+$/.test(String(sub))) ? Number(sub) : null;
+      }
+      function normalizeRole(r){ return String(r||"").toUpperCase().replace(/^ROLE_/, ""); }
+
+      const ROLE_PRIORITY = ["ADMIN", "ORGANIZER", "STAFF", "ARTIST", "USER"];
+
+      function pickBestAssignment(assignments){
+        // assignments: [{role:"ADMIN", festivalId:1}, ...]
+        const map = new Map();
+        for (const a of assignments){
+          const role = normalizeRole(a.role);
+          const festivalId = a.festivalId ?? a.festival_id ?? a.FESTIVAL_ID ?? null;
+          if (!map.has(role)) map.set(role, festivalId);
+        }
+        for (const wanted of ROLE_PRIORITY){
+          if (map.has(wanted)) return { role: wanted, festivalId: map.get(wanted) ?? null };
+        }
+        return { role: "USER", festivalId: null };
+      }
+
+      async function fetchAssignments(userId){
+        const headers = { Accept: "application/json", ...authHeader() };
+        const base = window.location.origin;
+
+        // 1) ?userId=...
+        for (const ep of ROLE_ENDPOINTS){
+          if (ep.includes("{id}")) continue;
+          const url = new URL(ep.startsWith("/") ? ep : (API_BASE + ep), base);
+          if (!ep.endsWith("/roles") && !ep.includes("?")) {
+            url.searchParams.set("userId", String(userId));
+          }
+          try{
+            const r = await fetch(url, { headers, credentials:"include" });
+            const ct = r.headers.get("content-type")||"";
+            if (!r.ok || !ct.includes("application/json")) continue;
+            const data = await r.json().catch(()=>null);
+            const arr = Array.isArray(data) ? data
+                      : Array.isArray(data?.content) ? data.content
+                      : Array.isArray(data?.items) ? data.items
+                      : [];
+            if (arr.length) return arr;
+          }catch{}
+        }
+
+        // 2) /users/{id}/roles
+        for (const ep of ROLE_ENDPOINTS){
+          if (!ep.includes("{id}")) continue;
+          const path = ep.replace("{id}", String(userId));
+          const finalPath = path.startsWith("/") ? path : "/" + path;
+          const joined = finalPath.startsWith(API_BASE + "/") ? finalPath : (API_BASE + finalPath);
+          const url = new URL(joined, base);
+
+          try{
+            const r = await fetch(url, { headers, credentials:"include" });
+            const ct = r.headers.get("content-type")||"";
+            if (!r.ok || !ct.includes("application/json")) continue;
+            const data = await r.json().catch(()=>null);
+            const arr = Array.isArray(data) ? data
+                      : Array.isArray(data?.content) ? data.content
+                      : Array.isArray(data?.items) ? data.items
+                      : [];
+            if (arr.length) return arr;
+          }catch{}
+        }
+
+        return [];
+      }
+
+function normalizeRole(r){ return String(r||"").toUpperCase().trim().replace(/^ROLE_/, ""); }
+
+function redirectFor(role){
+  const key = normalizeRole(role);
+  return ROLE_REDIRECTS[key] || DEFAULT_REDIRECT;
+}
+
+      // εικασία ρόλου αν όλα αποτύχουν (dev-friendly)
+      function guessRoleFromUsername(username){
+        const u = String(username||"").toLowerCase();
+        if (u.includes("admin") || u.includes("organizer")) return "ADMIN";
+        if (u.includes("staff")) return "STAFF";
+        if (u.includes("artist")) return "ARTIST";
+        return "USER";
+      }
+
+      function commitAndRedirect(chosen, warnText){
+  try {
+    sessionStorage.setItem("current_role", chosen.role);
+    if (chosen.festivalId != null) sessionStorage.setItem("current_festival_id", String(chosen.festivalId));
+    else sessionStorage.removeItem("current_festival_id");
+  } catch {}
+  if (warnText) setMsg(warnText, "warn");
+  const target = redirectFor(chosen.role);
+  // window.location.href = target;
+  window.location.replace(target);   // <— αυτό
+}
+
+      document.addEventListener("DOMContentLoaded", () => {
+        $("#showPw").addEventListener("change", e => {
+          $("#password").type = e.target.checked ? "text" : "password";
+        });
+
+        // Fallback buttons
+        $("#btn-fallback-admin")?.addEventListener("click", ()=> commitAndRedirect({role:"ADMIN", festivalId:null}, "Fallback: συνέχεια ως ADMIN/ORGANIZER"));
+        $("#btn-fallback-staff")?.addEventListener("click", ()=> commitAndRedirect({role:"STAFF", festivalId:null}, "Fallback: συνέχεια ως STAFF"));
+        $("#btn-fallback-artist")?.addEventListener("click", ()=> commitAndRedirect({role:"ARTIST", festivalId:null}, "Fallback: συνέχεια ως ARTIST"));
+        $("#btn-fallback-user")?.addEventListener("click", ()=> commitAndRedirect({role:"USER", festivalId:null}, "Fallback: συνέχεια ως USER"));
+
+        $("#form-login").addEventListener("submit", async (e) => {
+          e.preventDefault();
+          setMsg("");
+          showFallback(false);
+
+          const btn = $("#btn-submit");
+          const username = $("#username").value.trim();
+          const password = $("#password").value;
+          if (!username || !password){
+            setMsg("Συμπλήρωσε username και password.", "error");
+            return;
+          }
+
+          btn.disabled = true;
+          setMsg("Σύνδεση...", "");
+
+          try{
+            // SAFE join για login URL (αποφυγή διπλού /api)
+            const loginPath = LOGIN_PATH.startsWith("http")
+              ? LOGIN_PATH
+              : (LOGIN_PATH.startsWith("/") ? LOGIN_PATH : "/" + LOGIN_PATH);
+            const loginUrlPath = loginPath.startsWith(API_BASE + "/")
+              ? loginPath
+              : (API_BASE + loginPath);
+
+            const res = await fetch(new URL(loginUrlPath, window.location.origin), {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Accept": "application/json" },
+              body: JSON.stringify({ username, password }),
+              credentials: "include"
+            });
+
+            const ct = res.headers.get("content-type") || "";
+            const data = ct.includes("application/json") ? await res.json().catch(()=>null) : await res.text().catch(()=>null);
+
+            if (!res.ok){
+              setMsg(res.status === 401 ? "Λάθος στοιχεία σύνδεσης." : `Αποτυχία (HTTP ${res.status}).`, "error");
+              btn.disabled = false;
+              return;
+            }
+
+            // ===== ΑΠΟΘΗΚΕΥΣΗ TOKEN + ROLES ΣΕ localStorage =====
+            const token = (data && (data.accessToken || data.token || data.jwt)) || null;
+            if (token) { saveToken(token); }
+
+            // Ρόλοι από απόκριση (προτιμώμενο)
+            let roles = [];
+            if (Array.isArray(data?.roles)) roles = data.roles;
+            else if (Array.isArray(data?.authorities)) roles = data.authorities;
+            else if (typeof data?.role === "string") roles = [data.role];
+
+            // Αν είναι αντικείμενα [{authority:"ROLE_..."}] → σε strings
+            if (Array.isArray(roles) && roles.length && typeof roles[0] === "object"){
+              roles = roles.map(x => x?.authority ?? x?.role ?? x?.name ?? null).filter(Boolean);
+            }
+
+            // Fallback: από JWT payload
+            if ((!roles || roles.length===0) && token){
+              const pl = decodeJwtPayload(token) || {};
+              if (Array.isArray(pl.roles)) roles = pl.roles;
+              else if (Array.isArray(pl.authorities)) roles = pl.authorities;
+              else if (typeof pl.scope === "string") roles = pl.scope.split(/\s+/);
+              else if (typeof pl.role === "string") roles = [pl.role];
+            }
+
+            // Τελευταίο fallback: μάντεψε από username
+            if (!roles || roles.length===0){
+              const guessed = "ROLE_" + guessRoleFromUsername(username);
+              roles = [guessed];
+            }
+
+            // Αποθήκευση ρόλων (ως array από strings)
+            saveRoles(roles);
+
+            // Προσπάθησε assignments για festivalId (προαιρετικό)
+            let chosen = null;
+            try {
+              if (token){
+                const uid = pickNumericIdFromJwtSub(token);
+                if (uid != null){
+                  const assignments = await fetchAssignments(uid);
+                  const normalized = assignments.map(a => ({
+                    role: a.role || a.ROLE || a.name || a.NAME,
+                    festivalId: a.festivalId ?? a.FESTIVAL_ID ?? a.festival_id ?? null
+                  })).filter(x => x.role);
+                  if (normalized.length){
+                    chosen = pickBestAssignment(normalized);
+                  }
+                }
+              }
+            } catch {}
+
+            if (!chosen){
+              // αν δεν βρήκαμε assignments, αποφάσισε από ρόλους
+              const norm = (roles||[]).map(r => String(r).toUpperCase().replace(/^ROLE_/,""));
+              for (const r of ROLE_PRIORITY){ if (norm.includes(r)){ chosen = { role:r, festivalId:null }; break; } }
+              if (!chosen) chosen = { role:"USER", festivalId:null };
+            }
+
+            setMsg("Επιτυχής σύνδεση. Μεταφορά...", "success");
+            commitAndRedirect(chosen);
+
+          }catch(err){
+            setMsg("Δεν ήταν δυνατή η επικοινωνία με τον server. Μπορείς να χρησιμοποιήσεις fallback (κάτω).", "warn");
+            showFallback(true);
+          }finally{
+            btn.disabled = false;
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

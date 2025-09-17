@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Register · Festival Management</title>
+  <link rel="icon" href="/assets/favicon.ico" />
+  <style>
+    body{margin:0;background:#0f172a;color:#e5e7eb;font:16px/1.5 system-ui,Segoe UI,Roboto}
+    .container{max-width:900px;margin:2rem auto;padding:0 1rem}
+    .card{background:#111827;border:1px solid #1f2937;border-radius:16px;padding:1rem;margin-bottom:1rem}
+    h1,h2{margin:.2rem 0 .8rem}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+    .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+    label span{display:block;color:#94a3b8;font-size:.9rem;margin-bottom:.25rem}
+    input,select,textarea{width:100%;padding:.6rem .75rem;border-radius:10px;border:1px solid #1f2937;background:#0b1220;color:#e5e7eb}
+    textarea{min-height:96px}
+    .actions{display:flex;gap:.6rem;align-items:center}
+    button{padding:.6rem .95rem;border-radius:10px;border:1px solid #1f2937;background:#0b3750;color:#e5e7eb;cursor:pointer}
+    button[disabled]{opacity:.6;cursor:not-allowed}
+    .hint{color:#94a3b8;font-size:.9rem}
+    .row{display:flex;gap:.5rem;align-items:center}
+    .chips{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem}
+    .chip{background:#0b3750;border:1px solid #124b67;padding:.2rem .5rem;border-radius:999px}
+    .msg{margin-top:.75rem}
+    .msg.error{color:#fca5a5}.msg.success{color:#86efac}
+    a{color:#38bdf8;text-decoration:none} a:hover{text-decoration:underline}
+    .inline{display:flex;gap:.5rem;align-items:center}
+    .badge{display:inline-block;background:#0b3750;border:1px solid #124b67;color:#38bdf8;padding:.12rem .5rem;border-radius:999px;font-size:.8rem}
+    .spinner{display:inline-block;width:16px;height:16px;border:2px solid #334155;border-top-color:#38bdf8;border-radius:50%;animation:spin 1s linear infinite;margin-left:.4rem}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .fallback{margin-top:.5rem}
+    .fallback textarea{min-height:70px}
+    .muted{color:#94a3b8;font-size:.85rem}
+    .code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;white-space:pre-wrap}
+  </style>
+</head>
+<body>
+<main class="container">
+  <h1>Εγγραφή καλλιτέχνη & Δήλωση Παράστασης</h1>
+
+  <!-- Λογαριασμός -->
+  <section class="card">
+    <h2>Στοιχεία λογαριασμού</h2>
+    <div class="grid-3">
+      <label><span>Email *</span><input id="u_email" type="email" autocomplete="email" required /></label>
+      <label><span>Username *</span><input id="u_username" autocomplete="username" required /></label>
+      <label><span>Password *</span><input id="u_password" type="password" autocomplete="new-password" minlength="3" required /></label>
+      <label><span>Επιβεβαίωση Password *</span><input id="u_password2" type="password" autocomplete="new-password" minlength="3" required /></label>
+    </div>
+    <label class="inline"><input id="showPw" type="checkbox"/><span class="hint">Εμφάνιση κωδικού</span></label>
+  </section>
+
+  <!-- Παράσταση -->
+  <section class="card">
+    <h2>Στοιχεία Παράστασης</h2>
+
+    <div class="grid-2">
+      <label><span>Τίτλος (name) *</span><input id="p_name" required /></label>
+      <label><span>Κατηγορία (genre) *</span><input id="p_genre" placeholder="π.χ. Rock / Jazz / Theater" required /></label>
+    </div>
+
+    <label><span>Περιγραφή</span><textarea id="p_description" placeholder="Λίγα λόγια για την παράσταση"></textarea></label>
+
+    <label>
+      <span>Διάρκεια (λεπτά) *</span>
+      <input id="p_duration" type="number" min="1" step="1" value="60" required />
+      <span class="hint">ο πίνακας PERFORMANCES.DURATION είναι σε δευτερόλεπτα — θα γίνει αυτόματα ×60</span>
+    </label>
+
+    <label>
+      <span>Κατάσταση</span>
+      <div class="badge">SUBMITTED</div>
+      <span class="hint">στέλνουμε SUBMITTED (ή PENDING). Ο πίνακας δέχεται string.</span>
+    </label>
+
+    <label>
+      <span>Φεστιβάλ *</span>
+      <div class="row">
+        <select id="p_festival" required aria-label="Επιλογή φεστιβάλ">
+          <option value="">— φόρτωση… —</option>
+        </select>
+        <button id="btn-reload" type="button" title="Ανανέωση">↻</button>
+        <span id="fest-loading" class="spinner" style="display:none"></span>
+      </div>
+      <div class="muted" id="fest-hint">Τα festivals φορτώνονται από <code>/api/festivals</code> (GET).</div>
+
+      <details class="fallback">
+        <summary class="muted">Δεν φορτώνει; Επικόλλησε ονόματα (ένα ανά γραμμή)</summary>
+        <textarea id="fest-manual" placeholder="π.χ.
+Athens Jazz Festival
+Thessaloniki Film Festival
+Rockwave"></textarea>
+        <div class="actions">
+          <button type="button" id="btn-apply-manual">Γέμισε τη λίστα</button>
+          <span class="muted">Τα ονόματα μπαίνουν μόνο στο dropdown (χωρίς IDs).</span>
+        </div>
+      </details>
+    </label>
+
+    <div class="grid-3">
+      <label><span>Τεχνικές Απαιτήσεις</span><textarea id="p_requirements" placeholder="μία ανά γραμμή (π.χ. 2x μικρόφωνα)"></textarea></label>
+      <label><span>Merchandise Items</span><textarea id="p_merch" placeholder="μία ανά γραμμή (π.χ. T-shirts M/L)"></textarea></label>
+      <label><span>Setlist</span><textarea id="p_setlist" placeholder="μία ανά γραμμή (τίτλοι κομματιών)"></textarea></label>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <span class="hint">Προτιμώμενες ώρες πρόβας</span>
+        <div id="reh-list" class="chips"></div>
+        <div class="inline" style="margin-top:.5rem">
+          <input id="reh-input" type="datetime-local" />
+          <button type="button" id="reh-add">Προσθήκη</button>
+        </div>
+      </div>
+      <div>
+        <span class="hint">Προτιμώμενα time slots εμφάνισης</span>
+        <div id="slot-list" class="chips"></div>
+        <div class="inline" style="margin-top:.5rem">
+          <input id="slot-input" type="datetime-local" />
+          <button type="button" id="slot-add">Προσθήκη</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Υποβολή -->
+  <section class="card">
+    <div class="actions">
+      <button id="btn-submit">Ολοκλήρωση Εγγραφής</button>
+      <a href="/" class="hint">← Αρχική</a>
+    </div>
+    <div id="msg" class="msg"></div>
+    <div id="diag" class="muted code"></div>
+  </section>
+</main>
+
+<script>
+  // ===== CONFIG =====
+  const API_BASE = "/api";
+  const URLS = {
+    REGISTER: "/auth/register",
+    LOGIN: "/auth/login",
+    USERS: "/users",
+    FESTIVALS: "/festivals",
+    PERFORMANCES: "/performances"
+  };
+
+  // ===== helpers =====
+  const $ = s => document.querySelector(s);
+  const setMsg  = (t, kind) => { const m=$("#msg"); m.textContent = t||""; m.className = "msg"+(kind?" "+kind:""); };
+  const setDiag = (t) => { $("#diag").textContent = t || ""; };
+  const tokenSet = t => { try { t?localStorage.setItem("access_token", t):localStorage.removeItem("access_token"); } catch{} };
+  const authHeader = () => { const t=localStorage.getItem("access_token"); return t?{Authorization:"Bearer "+t}:{ }; };
+  const toISO = (val) => !val ? null : (val.length===16 ? val + ":00" : val);
+  const linesToSet = txt => Array.from(new Set((txt||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean)));
+  function addChip(listEl,val){ const el=document.createElement("span"); el.className="chip"; el.textContent=val; el.title="Click για αφαίρεση"; el.addEventListener("click",()=>el.remove()); listEl.appendChild(el); }
+  const currentChips = listEl => Array.from(listEl.querySelectorAll(".chip")).map(c=>c.textContent);
+  const isNumeric = v => v!=null && /^\d+$/.test(String(v));
+
+  // ===== festivals =====
+  async function loadFestivals(force=false){
+    const sel = $("#p_festival"), spn=$("#fest-loading"), hint=$("#fest-hint");
+    if (!force) {
+      try {
+        const cached = sessionStorage.getItem("festival_options");
+        if (cached) {
+          const list = JSON.parse(cached);
+          if (Array.isArray(list) && list.length) { fillFestivalSelect(list); hint.textContent="Φορτώθηκαν από cache. ↻ για ανανέωση."; return; }
+      } } catch {}
+    }
+    sel.innerHTML = '<option value="">— φόρτωση… —</option>'; spn.style.display='inline-block'; hint.textContent="Ανάκτηση από API…"; setDiag("");
+
+    try{
+      const res = await fetch(new URL(API_BASE + URLS.FESTIVALS, location.origin), { headers:{Accept:"application/json"} });
+      const ct = res.headers.get("content-type") || "";
+      const text = await res.text();
+      setDiag(`GET ${API_BASE+URLS.FESTIVALS}\nHTTP ${res.status} ${res.statusText}\nCT: ${ct}\nBody: ${text.slice(0,300)}${text.length>300?"…":""}`);
+      if (!res.ok || !ct.includes("application/json")) throw new Error("bad-response");
+      const data = JSON.parse(text);
+      let arr = Array.isArray(data) ? data : (Array.isArray(data?.content) ? data.content : []);
+      arr = (arr||[]).map(f => ({ id: f.id ?? f.festivalId ?? null, name: f.name ?? ("Festival "+(f.id??"")) })).filter(x => x.name);
+      arr.sort((a,b)=> String(a.name).localeCompare(String(b.name),'el',{sensitivity:'base'}));
+      sessionStorage.setItem("festival_options", JSON.stringify(arr));
+      fillFestivalSelect(arr); hint.textContent="OK από API.";
+    }catch(e){
+      sel.innerHTML = '<option value="">— αποτυχία φόρτωσης —</option>';
+      hint.textContent = "Άνοιξε προσωρινά σε permitAll το GET /api/festivals ή χρησιμοποίησε το fallback.";
+    }finally{
+      spn.style.display='none';
+    }
+  }
+  function fillFestivalSelect(list){
+    const sel = $("#p_festival");
+    sel.innerHTML = '<option value="">— επίλεξε —</option>';
+    for (const f of list){
+      const o = document.createElement("option");
+      o.value = f.id ?? "";      // θέλουμε κατά προτίμηση numeric id
+      o.textContent = f.name;
+      sel.appendChild(o);
+    }
+  }
+
+  // ===== register → login → fetch user id → create performance =====
+  async function onSubmit(){
+    setMsg(""); setDiag("");
+
+    const u   = $("#u_username").value.trim();
+    const em  = $("#u_email").value.trim();
+    const p1  = $("#u_password").value;
+    const p2  = $("#u_password2").value;
+
+    const name  = $("#p_name").value.trim();
+    const genre = $("#p_genre").value.trim();
+    const festId = $("#p_festival").value;
+
+    if (!u || !em || !p1 || !p2 || p1 !== p2){
+      setMsg("Συμπλήρωσε username / email και βεβαιώσου ότι τα passwords ταιριάζουν.","error");
+      return;
+    }
+    if (!name || !genre || !festId){
+      setMsg("Συμπλήρωσε name / genre / festival.","error");
+      return;
+    }
+
+    // 1) Register
+    setMsg("Δημιουργία λογαριασμού...", "");
+    let res = await fetch(new URL(API_BASE + URLS.REGISTER, location.origin), {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "Accept":"application/json" },
+      body: JSON.stringify({ username:u, email:em, password:p1 }),
+      credentials:"include"
+    });
+    if (!res.ok){
+      const txt = await res.text().catch(()=> "");
+      setMsg(res.status===409 ? "Το username ή/και το email χρησιμοποιούνται ήδη." : `Αποτυχία εγγραφής (HTTP ${res.status}).`, "error");
+      setDiag(txt);
+      return;
+    }
+
+    // 2) Login
+    setMsg("Σύνδεση...", "");
+    res = await fetch(new URL(API_BASE + URLS.LOGIN, location.origin), {
+      method:"POST",
+      headers:{ "Content-Type":"application/json", "Accept":"application/json" },
+      body: JSON.stringify({ username:u, password:p1 }),
+      credentials:"include"
+    });
+    const ct2 = res.headers.get("content-type") || "";
+    const data2 = ct2.includes("application/json") ? await res.json().catch(()=>null) : null;
+    if (!res.ok){
+      setMsg("Η σύνδεση απέτυχε μετά την εγγραφή.","error");
+      setDiag(JSON.stringify(data2||"",null,2));
+      return;
+    }
+    const token = (data2 && (data2.accessToken || data2.token || data2.jwt)) || null;
+    if (token) tokenSet(token);
+
+    // 3) Πάρε το id του χρήστη (ώστε να το στείλουμε ως mainArtistId)
+   // 3) Πάρε το id του χρήστη από το JWT ( /api/auth/me )
+setMsg("Ανάκτηση στοιχείων χρήστη...", "");
+let userId = null;
+try {
+  const rMe = await fetch(new URL(`${API_BASE}/auth/me`, location.origin), {
+    headers: { Accept: "application/json", ...authHeader() },
+    credentials: "include"
+  });
+  const me = rMe.ok ? await rMe.json().catch(() => null) : null;
+  userId = me && (me.id ?? me.userId ?? null);
+} catch {}
+
+if (!(Number.isInteger(userId) && userId > 0)) {
+  setMsg("Δεν μπόρεσα να βρω το ID του χρήστη μετά το login.", "error");
+  setDiag("Το /api/auth/me πρέπει να επιστρέφει { id, username, email, roles } και να δέχεται JWT.");
+  return;
+}
+
+    // 4) Δημιουργία Performance
+    setMsg("Καταχώριση παράστασης...", "");
+
+    const durationMinutes = parseInt($("#p_duration").value, 10);
+    if (isNaN(durationMinutes) || durationMinutes <= 0) {
+      setMsg("Η διάρκεια πρέπει να είναι > 0 λεπτά.","error");
+      return;
+    }
+    const durationSeconds = durationMinutes * 60;
+
+    const perfBody = {
+      name,
+      description: $("#p_description").value || null,
+      genre,
+      status: "SUBMITTED",                // δέχεται string (π.χ. SUBMITTED/PENDING)
+      duration: durationSeconds,          // ΠΙΝΑΚΑΣ: DURATION σε SECONDS
+      mainArtistId: Number(userId),       // να γραφτεί ως main artist
+      technicalRequirements: linesToSet($("#p_requirements").value),
+      merchandiseItems:     linesToSet($("#p_merch").value),
+      setlist:              linesToSet($("#p_setlist").value),
+      preferredRehearsalTimes:  currentChips($("#reh-list")).map(toISO),
+      preferredPerformanceSlots: currentChips($("#slot-list")).map(toISO)
+    };
+
+    async function tryPost(url, body, method="POST"){
+      const res = await fetch(new URL(url, location.origin), {
+        method,
+        headers:{ "Content-Type":"application/json","Accept":"application/json", ...authHeader() },
+        body: JSON.stringify(body),
+        credentials:"include"
+      });
+      const ct = res.headers.get("content-type") || "";
+      const payload = ct.includes("application/json") ? await res.json().catch(()=>null) : await res.text().catch(()=>null);
+      return { ok: res.ok, status: res.status, payload, url };
+    }
+
+    const tried = [];
+    let resp;
+
+    // (A) POST /performances/festival/{id}
+    if (isNumeric(festId)){
+      resp = await tryPost(`${API_BASE}${URLS.PERFORMANCES}/festival/${encodeURIComponent(festId)}`, perfBody);
+      tried.push(resp.url);
+      if (resp.ok) return doneOk();
+      if (resp.status === 401) return expired(resp);
+    }
+
+    // (B) POST /performances (με festivalId μέσα)
+    if (!resp || !resp.ok){
+      const b2 = { ...perfBody, festivalId: isNumeric(festId) ? Number(festId) : null };
+      const r2 = await tryPost(`${API_BASE}${URLS.PERFORMANCES}`, b2);
+      tried.push(r2.url);
+      if (r2.ok) return doneOk(); else resp = r2;
+      if (r2.status === 401) return expired(r2);
+    }
+
+    // (C) POST /festivals/{id}/performances
+    if (!resp.ok && isNumeric(festId)){
+      const r3 = await tryPost(`${API_BASE}${URLS.FESTIVALS}/${encodeURIComponent(festId)}/performances`, perfBody);
+      tried.push(r3.url);
+      if (r3.ok) return doneOk(); else resp = r3;
+      if (r3.status === 401) return expired(r3);
+    }
+
+    // Τίποτα δεν πέτυχε
+    const errMsg = (resp.payload && (resp.payload.message || resp.payload.error)) || `Αποτυχία καταχώρισης (HTTP ${resp.status}).`;
+    setMsg(errMsg, "error");
+    setDiag(`Tried:\n${tried.join("\n")}\n\nResponse:\n${typeof resp.payload==='string'?resp.payload:JSON.stringify(resp.payload||"",null,2)}`);
+    return;
+
+    function expired(r){
+      setMsg("Η συνεδρία έληξε. Κάνε ξανά login και δοκίμασε πάλι.","error");
+      setDiag(typeof r.payload==='string'?r.payload:JSON.stringify(r.payload||"",null,2));
+    }
+    function doneOk(){
+      setMsg("Ο λογαριασμός δημιουργήθηκε και η παράσταση καταχωρίστηκε! Μεταφορά...","success");
+      setTimeout(()=>{ window.location.href="/login.html"; }, 1200);
+    }
+  }
+
+  // ===== init =====
+  document.addEventListener("DOMContentLoaded", () => {
+    $("#showPw").addEventListener("change", e=>{
+      const t=e.target.checked?"text":"password";
+      $("#u_password").type=t; $("#u_password2").type=t;
+    });
+    $("#reh-add").addEventListener("click", ()=>{
+      const v=$("#reh-input").value; if(v){ addChip($("#reh-list"),v); $("#reh-input").value=""; }
+    });
+    $("#slot-add").addEventListener("click", ()=>{
+      const v=$("#slot-input").value; if(v){ addChip($("#slot-list"),v); $("#slot-input").value=""; }
+    });
+
+    $("#btn-submit").addEventListener("click", async ()=>{
+      try{ $("#btn-submit").disabled=true; await onSubmit(); }
+      finally { $("#btn-submit").disabled=false; }
+    });
+    $("#btn-reload").addEventListener("click", ()=> loadFestivals(true));
+    $("#btn-apply-manual").addEventListener("click", ()=>{
+      const names = Array.from(new Set(($("#fest-manual").value||"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean)));
+      if (!names.length) return;
+      const list = names.map((n)=>({ id: null, name: n }));
+      fillFestivalSelect(list);
+      setMsg("Η λίστα festivals ενημερώθηκε από manual input.","success");
+    });
+
+    loadFestivals();
+  });
+</script>
+</body>
+</html>
